@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Board</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #ffffff;
+    font-family: 'Georgia', serif;
+    cursor: default;
+    user-select: none;
+  }
+
+  #hint {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+  }
+
+  #hint p {
+    font-size: 13px;
+    color: #c8c8c8;
+    letter-spacing: 0.08em;
+    line-height: 2;
+  }
+
+  #hint .key {
+    display: inline-block;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    color: #c0c0c0;
+    font-family: monospace;
+  }
+
+  #hint.hidden { opacity: 0; }
+
+  .item {
+    position: absolute;
+    cursor: grab;
+    min-width: 40px;
+    min-height: 20px;
+  }
+
+  .item:active { cursor: grabbing; }
+
+  .item.selected {
+    outline: 1.5px solid #d0d0d0;
+    outline-offset: 4px;
+  }
+
+  .item-text {
+    font-family: 'Georgia', serif;
+    font-size: 14px;
+    color: #1a1a1a;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: 2px 4px;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .item-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    border-radius: 2px;
+  }
+
+  .delete-btn {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 18px;
+    height: 18px;
+    background: #e0e0e0;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 10px;
+    color: #888;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    transition: background 0.15s;
+  }
+  .delete-btn:hover { background: #f0a0a0; color: #fff; }
+  .item.selected .delete-btn { display: flex; }
+
+  /* resize handle — bottom-right corner dot */
+  .resize-handle {
+    position: absolute;
+    bottom: -6px;
+    right: -6px;
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    border: 1.5px solid #c8c8c8;
+    border-radius: 50%;
+    cursor: se-resize;
+    display: none;
+    z-index: 10;
+  }
+  .item.selected .resize-handle { display: block; }
+
+  @keyframes pasteFlash {
+    0%  { opacity: 0; transform: scale(0.96); }
+    100%{ opacity: 1; transform: scale(1); }
+  }
+  .item { animation: pasteFlash 0.2s ease forwards; }
+
+  #counter {
+    position: fixed;
+    bottom: 20px;
+    right: 24px;
+    font-size: 11px;
+    color: #d8d8d8;
+    letter-spacing: 0.06em;
+    pointer-events: none;
+    font-family: monospace;
+  }
+</style>
+</head>
+<body>
+
+<div id="hint">
+  <p><span class="key">⌘V</span> &nbsp;or&nbsp; <span class="key">Ctrl V</span> &nbsp;to paste anything</p>
+  <p>text &nbsp;·&nbsp; images &nbsp;·&nbsp; screenshots</p>
+  <p style="margin-top:8px; font-size:11px; color:#d8d8d8;">drag corner dot to resize &nbsp;·&nbsp; double-click text to edit</p>
+</div>
+
+<div id="counter"></div>
+
+<script>
+  const hint    = document.getElementById('hint');
+  const counter = document.getElementById('counter');
+
+  let items    = [];
+  let selected = null;
+
+  let dragging   = false;
+  let dragOffset = { x: 0, y: 0 };
+
+  let resizing    = false;
+  let resizeStart = {};
+  let resizeEl    = null;
+
+  function updateCounter() {
+    counter.textContent = items.length ? `${items.length} item${items.length > 1 ? 's' : ''}` : '';
+    items.length ? hint.classList.add('hidden') : hint.classList.remove('hidden');
+  }
+
+  function selectItem(el) {
+    if (selected) selected.classList.remove('selected');
+    selected = el;
+    if (selected) selected.classList.add('selected');
+  }
+
+  function randomPos() {
+    return {
+      x: window.innerWidth  / 2 + (Math.random() - 0.5) * 300 - 100,
+      y: window.innerHeight / 2 + (Math.random() - 0.5) * 200 - 60,
+    };
+  }
+
+  function createItem(type, content, x, y, w, h) {
+    const el = document.createElement('div');
+    el.className = `item item-${type}`;
+    el.style.left   = x + 'px';
+    el.style.top    = y + 'px';
+    el.style.width  = (w || (type === 'text' ? 300 : 320)) + 'px';
+    el.style.height = (h || (type === 'text' ?  80 : 240)) + 'px';
+
+    if (type === 'text') {
+      const span = document.createElement('div');
+      span.className = 'item-text';
+      span.textContent = content;
+
+      span.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        span.contentEditable = 'true';
+        span.style.cursor = 'text';
+        span.focus();
+      });
+      span.addEventListener('blur', () => {
+        span.contentEditable = 'false';
+        span.style.cursor = '';
+      });
+      el.appendChild(span);
+
+    } else if (type === 'image') {
+      const img = document.createElement('img');
+      img.src = content;
+      img.draggable = false;
+      el.appendChild(img);
+    }
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'delete-btn';
+    delBtn.textContent = '×';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      el.remove();
+      items = items.filter(i => i !== el);
+      if (selected === el) selected = null;
+      updateCounter();
+    });
+    el.appendChild(delBtn);
+
+    const handle = document.createElement('div');
+    handle.className = 'resize-handle';
+    el.appendChild(handle);
+
+    handle.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      resizing  = true;
+      resizeEl  = el;
+      resizeStart = {
+        mouseX: e.clientX,
+        mouseY: e.clientY,
+        w: el.offsetWidth,
+        h: el.offsetHeight,
+      };
+    });
+
+    el.addEventListener('mousedown', (e) => {
+      if (e.target === delBtn || e.target === handle) return;
+      if (e.target.contentEditable === 'true') return;
+      selectItem(el);
+      dragging = true;
+      dragOffset.x = e.clientX - el.offsetLeft;
+      dragOffset.y = e.clientY - el.offsetTop;
+      e.preventDefault();
+    });
+
+    document.body.appendChild(el);
+    items.push(el);
+    selectItem(el);
+    updateCounter();
+    return el;
+  }
+
+  document.addEventListener('mousemove', (e) => {
+    if (dragging && selected) {
+      selected.style.left = (e.clientX - dragOffset.x) + 'px';
+      selected.style.top  = (e.clientY - dragOffset.y) + 'px';
+    }
+    if (resizing && resizeEl) {
+      const newW = Math.max(80,  resizeStart.w + (e.clientX - resizeStart.mouseX));
+      const newH = Math.max(40,  resizeStart.h + (e.clientY - resizeStart.mouseY));
+      resizeEl.style.width  = newW + 'px';
+      resizeEl.style.height = newH + 'px';
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    dragging = false;
+    resizing = false;
+    resizeEl = null;
+  });
+
+  document.body.addEventListener('mousedown', (e) => {
+    if (e.target === document.body || e.target === hint || e.target === counter) {
+      selectItem(null);
+    }
+  });
+
+  document.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const clip = e.clipboardData;
+    const pos  = randomPos();
+
+    for (const item of clip.items) {
+      if (item.type.startsWith('image/')) {
+        const url = URL.createObjectURL(item.getAsFile());
+        createItem('image', url, pos.x, pos.y);
+        return;
+      }
+    }
+
+    const text = clip.getData('text/plain').trim();
+    if (text) createItem('text', text, pos.x, pos.y);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
+      const editing = selected.querySelector('[contenteditable="true"]');
+      if (editing) return;
+      selected.remove();
+      items = items.filter(i => i !== selected);
+      selected = null;
+      updateCounter();
+    }
+  });
+</script>
+</body>
+</html>
