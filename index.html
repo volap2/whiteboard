@@ -43,6 +43,7 @@
   }
   #hint.hidden { opacity: 0; }
 
+  /* ── items ── */
   .item {
     position: absolute;
     cursor: grab;
@@ -54,7 +55,6 @@
     outline: 1.5px solid #d0d0d0;
     outline-offset: 4px;
   }
-
   .item-text {
     font-family: 'Georgia', serif;
     font-size: 14px;
@@ -67,7 +67,6 @@
     height: 100%;
     overflow: hidden;
   }
-
   .item-image img {
     width: 100%;
     height: 100%;
@@ -75,7 +74,6 @@
     display: block;
     border-radius: 2px;
   }
-
   .delete-btn {
     position: absolute;
     top: -10px;
@@ -96,7 +94,6 @@
   }
   .delete-btn:hover { background: #f0a0a0; color: #fff; }
   .item.selected .delete-btn { display: flex; }
-
   .resize-handle {
     position: absolute;
     bottom: -6px;
@@ -118,48 +115,81 @@
   }
   .item { animation: pasteFlash 0.2s ease forwards; }
 
-  /* ── toolbar ── */
+  /* ── floating buttons ── */
   #toolbar {
     position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: 28px;
+    right: 28px;
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-end;
+    z-index: 50;
+  }
+
+  .fab {
+    display: flex;
     align-items: center;
-  }
-
-  #toolbar button {
-    background: #1a1a1a;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 18px;
-    font-size: 12px;
-    letter-spacing: 0.05em;
+    justify-content: flex-end;
+    gap: 0px;
     cursor: pointer;
-    font-family: 'Georgia', serif;
-    transition: background 0.15s, opacity 0.15s;
+    border: none;
+    background: none;
+    padding: 0;
   }
-  #toolbar button:hover { background: #333; }
-  #toolbar button:disabled { opacity: 0.4; cursor: default; }
-  #toolbar button.secondary {
-    background: transparent;
-    color: #aaa;
-    border: 1px solid #e8e8e8;
-  }
-  #toolbar button.secondary:hover { background: #f8f8f8; color: #555; }
 
-  #status {
+  .fab-label {
+    font-family: 'Georgia', serif;
     font-size: 11px;
-    color: #bbb;
+    letter-spacing: 0.06em;
+    color: #aaa;
+    overflow: hidden;
+    max-width: 0;
+    opacity: 0;
+    white-space: nowrap;
+    transition: max-width 0.35s ease, opacity 0.25s ease, margin 0.35s ease;
+    pointer-events: none;
+  }
+
+  .fab:hover .fab-label {
+    max-width: 80px;
+    opacity: 1;
+    margin-right: 8px;
+  }
+
+  .fab-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #d0d0d0;
+    transition: background 0.2s, transform 0.2s;
+    flex-shrink: 0;
+  }
+
+  .fab:hover .fab-dot {
+    transform: scale(1.3);
+  }
+
+  #shareBtn .fab-dot { background: #1a1a1a; }
+  #shareBtn:hover .fab-dot { background: #444; }
+  #shareBtn .fab-label { color: #555; }
+
+  #clearBtn:hover .fab-dot { background: #f0a0a0; }
+
+  /* status */
+  #status {
+    position: fixed;
+    bottom: 28px;
+    left: 28px;
+    font-size: 11px;
+    color: #ccc;
     font-family: monospace;
     letter-spacing: 0.04em;
-    min-width: 120px;
-    text-align: center;
+    pointer-events: none;
+    transition: opacity 0.4s;
   }
 
-  /* ── share toast ── */
+  /* toast */
   #toast {
     position: fixed;
     top: 24px;
@@ -188,20 +218,25 @@
 </div>
 
 <div id="toolbar">
-  <button class="secondary" id="clearBtn">clear</button>
-  <span id="status"></span>
-  <button id="shareBtn">share →</button>
+  <button class="fab" id="clearBtn">
+    <span class="fab-label">clear</span>
+    <span class="fab-dot"></span>
+  </button>
+  <button class="fab" id="shareBtn">
+    <span class="fab-label">share</span>
+    <span class="fab-dot"></span>
+  </button>
 </div>
 
-<div id="toast" id="toast">copied! click to open</div>
+<div id="status"></div>
+<div id="toast"></div>
 
 <script>
-  // ── Supabase config ──
   const SUPABASE_URL = 'https://owfpkdogtulgeyiwjrre.supabase.co';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93ZnBrZG9ndHVsZ2V5aXdqcnJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4OTE0ODMsImV4cCI6MjA5MDQ2NzQ4M30.EX4KVlfSA95D5SZvnFbtpD9Whvr-qR62GlrU83PEqck';
 
   const hint     = document.getElementById('hint');
-  const status   = document.getElementById('status');
+  const statusEl = document.getElementById('status');
   const shareBtn = document.getElementById('shareBtn');
   const clearBtn = document.getElementById('clearBtn');
   const toast    = document.getElementById('toast');
@@ -210,36 +245,12 @@
   let selected = null;
   let dragging = false, dragOffset = { x: 0, y: 0 };
   let resizing = false, resizeStart = {}, resizeEl = null;
-  let sharedUrl = null;
 
-  // ── supabase helpers ──
-  async function dbSave(data) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/boards`, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify({ data: JSON.stringify(data) })
-    });
-    return res.json();
+  function setStatus(msg, fade) {
+    statusEl.style.opacity = '1';
+    statusEl.textContent = msg;
+    if (fade) setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
   }
-
-  async function dbLoad(id) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/boards?id=eq.${id}&select=data`, {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`
-      }
-    });
-    const rows = await res.json();
-    return rows[0]?.data ? JSON.parse(rows[0].data) : null;
-  }
-
-  // ── item helpers ──
-  function setStatus(msg) { status.textContent = msg; }
 
   function updateHint() {
     items.length ? hint.classList.add('hidden') : hint.classList.remove('hidden');
@@ -282,7 +293,6 @@
         span.style.cursor = '';
       });
       el.appendChild(span);
-
     } else if (type === 'image') {
       const img = document.createElement('img');
       img.src = content;
@@ -328,64 +338,71 @@
     return el;
   }
 
-  // ── serialise board (text only; images stored as data URLs) ──
   function serialise() {
-    return items.map(el => {
-      const isText = el.classList.contains('item-text');
-      return {
-        type:    isText ? 'text' : 'image',
-        content: isText ? el.querySelector('.item-text').textContent
-                        : el.querySelector('img').src,
-        x: el.offsetLeft,
-        y: el.offsetTop,
-        w: el.offsetWidth,
-        h: el.offsetHeight,
-      };
-    });
+    return items.map(el => ({
+      type:    el.classList.contains('item-text') ? 'text' : 'image',
+      content: el.classList.contains('item-text')
+               ? el.querySelector('.item-text').textContent
+               : el.querySelector('img').src,
+      x: el.offsetLeft, y: el.offsetTop,
+      w: el.offsetWidth, h: el.offsetHeight,
+    }));
   }
 
   function deserialise(data) {
     data.forEach(d => createItem(d.type, d.content, d.x, d.y, d.w, d.h, true));
   }
 
-  // ── share button ──
+  async function dbSave(data) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/boards`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({ data: JSON.stringify(data) })
+    });
+    return res.json();
+  }
+
+  async function dbLoad(id) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/boards?id=eq.${id}&select=data`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+    });
+    const rows = await res.json();
+    return rows[0]?.data ? JSON.parse(rows[0].data) : null;
+  }
+
   shareBtn.addEventListener('click', async () => {
-    if (!items.length) { setStatus('nothing to share'); return; }
-    shareBtn.disabled = true;
+    if (!items.length) { setStatus('nothing to share', true); return; }
     setStatus('saving…');
+    shareBtn.style.pointerEvents = 'none';
     try {
       const rows = await dbSave(serialise());
-      const id   = rows[0]?.id;
-      if (!id) throw new Error('no id');
-      sharedUrl = `${location.origin}${location.pathname}?b=${id}`;
-      await navigator.clipboard.writeText(sharedUrl);
-      setStatus('link copied!');
-      showToast(sharedUrl);
+      const id = rows[0]?.id;
+      if (!id) throw new Error();
+      const url = `${location.origin}${location.pathname}?b=${id}`;
+      await navigator.clipboard.writeText(url);
+      setStatus('copied!', true);
+      toast.textContent = '🔗 link copied — click to open';
+      toast.classList.add('show');
+      toast.onclick = () => window.open(url, '_blank');
+      setTimeout(() => toast.classList.remove('show'), 4000);
     } catch(e) {
-      setStatus('error :(');
-      console.error(e);
+      setStatus('error :(', true);
     }
-    shareBtn.disabled = false;
+    shareBtn.style.pointerEvents = '';
   });
 
-  // ── clear button ──
   clearBtn.addEventListener('click', () => {
     items.forEach(el => el.remove());
-    items = [];
-    selected = null;
-    setStatus('');
+    items = []; selected = null;
+    setStatus('', false);
     updateHint();
   });
 
-  // ── toast ──
-  function showToast(url) {
-    toast.textContent = '🔗 link copied! click to open';
-    toast.classList.add('show');
-    toast.onclick = () => window.open(url, '_blank');
-    setTimeout(() => toast.classList.remove('show'), 4000);
-  }
-
-  // ── mouse ──
   document.addEventListener('mousemove', e => {
     if (dragging && selected) {
       selected.style.left = (e.clientX - dragOffset.x) + 'px';
@@ -401,7 +418,6 @@
     if (e.target === document.body || e.target === hint) selectItem(null);
   });
 
-  // ── paste ──
   document.addEventListener('paste', e => {
     e.preventDefault();
     const clip = e.clipboardData;
@@ -418,7 +434,6 @@
     if (text) createItem('text', text, pos.x, pos.y);
   });
 
-  // ── keyboard delete ──
   document.addEventListener('keydown', e => {
     if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
       if (selected.querySelector('[contenteditable="true"]')) return;
@@ -429,19 +444,15 @@
     }
   });
 
-  // ── load board from URL ──
   (async () => {
-    const params = new URLSearchParams(location.search);
-    const id = params.get('b');
+    const id = new URLSearchParams(location.search).get('b');
     if (!id) return;
     setStatus('loading…');
     try {
       const data = await dbLoad(id);
-      if (data) { deserialise(data); setStatus(''); }
-      else setStatus('board not found');
-    } catch(e) {
-      setStatus('error loading');
-    }
+      if (data) { deserialise(data); setStatus('', false); }
+      else setStatus('board not found', true);
+    } catch { setStatus('error loading', true); }
   })();
 </script>
 </body>
