@@ -1,20 +1,67 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Board</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;1,300&family=DM+Sans:wght@300;400&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --bg:          #0e0e0e;
+    --border:      #2a2a2a;
+    --text:        #e8e8e8;
+    --muted:       #444;
+    --hint:        #2a2a2a;
+    --dot-clear:   #333;
+    --dot-share:   #e8e8e8;
+    --fab-label:   #555;
+    --status:      #333;
+    --toast-bg:    #181818;
+    --toast-color: #e8e8e8;
+    --glow:        rgba(255,255,255,0.15);
+    --danger:      #c0392b;
+    --del-bg:      #181818;
+    --resize-bg:   #0e0e0e;
+  }
+
+  [data-theme="light"] {
+    --bg:          #f7f6f3;
+    --border:      #d8d5d0;
+    --text:        #1a1a1a;
+    --muted:       #bbb;
+    --hint:        #d0cdc8;
+    --dot-clear:   #ccc;
+    --dot-share:   #1a1a1a;
+    --fab-label:   #aaa;
+    --status:      #ccc;
+    --toast-bg:    #1a1a1a;
+    --toast-color: #f7f6f3;
+    --glow:        rgba(0,0,0,0.08);
+    --del-bg:      #ede9e3;
+    --resize-bg:   #f7f6f3;
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
     width: 100vw;
     height: 100vh;
     overflow: hidden;
-    background: #ffffff;
-    font-family: 'Georgia', serif;
+    background: var(--bg);
+    font-family: 'DM Sans', sans-serif;
     cursor: default;
     user-select: none;
+    transition: background 0.4s ease;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    opacity: 0.025;
+    pointer-events: none;
+    z-index: 0;
   }
 
   #hint {
@@ -24,22 +71,28 @@
     transform: translate(-50%, -50%);
     text-align: center;
     pointer-events: none;
-    transition: opacity 0.6s ease;
+    transition: opacity 0.8s ease;
+    z-index: 1;
   }
-  #hint p {
-    font-size: 13px;
-    color: #c8c8c8;
-    letter-spacing: 0.08em;
-    line-height: 2;
+  #hint .big {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 300;
+    color: var(--hint);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    line-height: 2.4;
+    transition: color 0.4s;
   }
   #hint .key {
     display: inline-block;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    padding: 1px 6px;
-    font-size: 11px;
-    color: #c0c0c0;
-    font-family: monospace;
+    border: 1px solid var(--hint);
+    border-radius: 3px;
+    padding: 1px 7px;
+    font-size: 10px;
+    color: var(--hint);
+    font-family: 'DM Mono', monospace;
+    transition: border-color 0.4s, color 0.4s;
   }
   #hint.hidden { opacity: 0; }
 
@@ -49,80 +102,112 @@
     cursor: grab;
     min-width: 40px;
     min-height: 20px;
+    z-index: 2;
+    /* overflow visible so delete/resize buttons aren't clipped */
+    overflow: visible;
   }
   .item:active { cursor: grabbing; }
-  .item.selected {
-    outline: 1.5px solid #d0d0d0;
-    outline-offset: 4px;
+  .item.selected::after {
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    pointer-events: none;
+    transition: border-color 0.4s;
   }
+
+  /* text card — fully transparent, no border */
   .item-text {
-    font-family: 'Georgia', serif;
-    font-size: 14px;
-    color: #1a1a1a;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    word-break: break-word;
+    background: transparent;
+    border: none;
     padding: 2px 4px;
     width: 100%;
     height: 100%;
+  }
+  .item-text-inner {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 300;
+    color: var(--text);
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
+    outline: none;
+    background: transparent;
+    transition: color 0.4s;
+  }
+
+  /* image card — no border, overflow visible for buttons */
+  .item-image {
+    border-radius: 4px;
+    overflow: visible; /* ← fix: don't clip the buttons */
+    border: none;
+    width: 100%;
+    height: 100%;
+    position: relative;
   }
   .item-image img {
     width: 100%;
     height: 100%;
     object-fit: contain;
     display: block;
-    border-radius: 2px;
+    border-radius: 4px;
   }
+
+  /* delete button — bigger tap target */
   .delete-btn {
     position: absolute;
-    top: -10px;
-    right: -10px;
-    width: 18px;
-    height: 18px;
-    background: #e0e0e0;
-    border: none;
+    top: -10px; right: -10px;
+    width: 22px; height: 22px;
+    background: var(--del-bg);
+    border: 1px solid var(--border);
     border-radius: 50%;
     cursor: pointer;
-    font-size: 10px;
-    color: #888;
+    font-size: 12px;
+    color: var(--muted);
     display: none;
     align-items: center;
     justify-content: center;
-    z-index: 10;
-    transition: background 0.15s;
+    z-index: 20;
+    transition: border-color 0.15s, color 0.15s, background 0.4s;
+    line-height: 1;
   }
-  .delete-btn:hover { background: #f0a0a0; color: #fff; }
+  .delete-btn:hover { border-color: var(--danger); color: var(--danger); }
   .item.selected .delete-btn { display: flex; }
+
+  /* resize handle — bigger tap target */
   .resize-handle {
     position: absolute;
-    bottom: -6px;
-    right: -6px;
-    width: 14px;
-    height: 14px;
-    background: #fff;
-    border: 1.5px solid #c8c8c8;
+    bottom: -8px; right: -8px;
+    width: 16px; height: 16px;
+    background: var(--resize-bg);
+    border: 1px solid var(--border);
     border-radius: 50%;
     cursor: se-resize;
     display: none;
-    z-index: 10;
+    z-index: 20;
+    transition: border-color 0.15s, transform 0.15s, background 0.4s;
   }
+  .resize-handle:hover { border-color: var(--muted); transform: scale(1.3); }
   .item.selected .resize-handle { display: block; }
 
-  @keyframes pasteFlash {
-    0%  { opacity: 0; transform: scale(0.96); }
-    100%{ opacity: 1; transform: scale(1); }
+  @keyframes itemIn {
+    0%  { opacity: 0; transform: scale(0.94) translateY(4px); }
+    100%{ opacity: 1; transform: scale(1)    translateY(0);   }
   }
-  .item { animation: pasteFlash 0.2s ease forwards; }
+  .item { animation: itemIn 0.25s cubic-bezier(0.16,1,0.3,1) forwards; }
 
-  /* ── floating buttons ── */
+  /* ── toolbar ── */
   #toolbar {
     position: fixed;
-    bottom: 28px;
-    right: 28px;
+    bottom: 28px; right: 28px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     align-items: flex-end;
     z-index: 50;
   }
@@ -131,80 +216,86 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0px;
+    gap: 0;
     cursor: pointer;
     border: none;
     background: none;
-    padding: 0;
+    padding: 4px 0;
   }
-
   .fab-label {
-    font-family: 'Georgia', serif;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    color: #aaa;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 300;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fab-label);
     overflow: hidden;
-    max-width: 0;
-    opacity: 0;
+    max-width: 0; opacity: 0;
     white-space: nowrap;
-    transition: max-width 0.35s ease, opacity 0.25s ease, margin 0.35s ease;
+    transition: max-width 0.4s cubic-bezier(0.16,1,0.3,1),
+                opacity 0.3s ease,
+                margin 0.4s cubic-bezier(0.16,1,0.3,1),
+                color 0.4s;
     pointer-events: none;
   }
-
-  .fab:hover .fab-label {
-    max-width: 80px;
-    opacity: 1;
-    margin-right: 8px;
-  }
-
+  .fab:hover .fab-label { max-width: 80px; opacity: 1; margin-right: 10px; }
   .fab-dot {
-    width: 9px;
-    height: 9px;
+    width: 7px; height: 7px;
     border-radius: 50%;
-    background: #d0d0d0;
-    transition: background 0.2s, transform 0.2s;
+    background: var(--dot-clear);
+    transition: background 0.25s, transform 0.25s;
     flex-shrink: 0;
   }
+  #clearBtn:hover .fab-dot { background: var(--danger); transform: scale(1.4); }
+  #shareBtn .fab-dot        { background: var(--dot-share); }
+  #shareBtn:hover .fab-dot  { transform: scale(1.4); box-shadow: 0 0 8px var(--glow); }
 
-  .fab:hover .fab-dot {
-    transform: scale(1.3);
+  /* theme toggle */
+  #themeBtn {
+    position: fixed;
+    bottom: 28px; left: 28px;
+    width: 28px; height: 28px;
+    background: none; border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 50; padding: 0;
   }
+  #themeBtn svg {
+    width: 14px; height: 14px;
+    transition: opacity 0.3s, transform 0.5s cubic-bezier(0.16,1,0.3,1);
+  }
+  #themeBtn:hover svg { transform: rotate(20deg) scale(1.15); }
+  .icon-moon { display: block; }
+  .icon-sun  { display: none;  }
+  [data-theme="light"] .icon-moon { display: none; }
+  [data-theme="light"] .icon-sun  { display: block; }
 
-  #shareBtn .fab-dot { background: #1a1a1a; }
-  #shareBtn:hover .fab-dot { background: #444; }
-  #shareBtn .fab-label { color: #555; }
-
-  #clearBtn:hover .fab-dot { background: #f0a0a0; }
-
-  /* status */
   #status {
     position: fixed;
-    bottom: 28px;
-    left: 28px;
-    font-size: 11px;
-    color: #ccc;
-    font-family: monospace;
-    letter-spacing: 0.04em;
+    bottom: 28px; left: 68px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; font-weight: 300;
+    letter-spacing: 0.1em;
+    color: var(--status);
     pointer-events: none;
-    transition: opacity 0.4s;
+    transition: opacity 0.5s, color 0.4s;
+    z-index: 50;
   }
 
-  /* toast */
   #toast {
     position: fixed;
-    top: 24px;
-    left: 50%;
-    transform: translateX(-50%) translateY(-60px);
-    background: #1a1a1a;
-    color: #fff;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-size: 12px;
-    font-family: monospace;
-    letter-spacing: 0.04em;
-    transition: transform 0.3s ease;
-    z-index: 100;
-    cursor: pointer;
+    top: 24px; left: 50%;
+    transform: translateX(-50%) translateY(-70px);
+    background: var(--toast-bg);
+    border: 1px solid var(--border);
+    color: var(--toast-color);
+    padding: 10px 22px;
+    border-radius: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; font-weight: 300;
+    letter-spacing: 0.08em;
+    transition: transform 0.4s cubic-bezier(0.16,1,0.3,1), background 0.4s, color 0.4s;
+    z-index: 100; cursor: pointer;
   }
   #toast.show { transform: translateX(-50%) translateY(0); }
 </style>
@@ -212,10 +303,26 @@
 <body>
 
 <div id="hint">
-  <p><span class="key">⌘V</span> &nbsp;or&nbsp; <span class="key">Ctrl V</span> &nbsp;to paste anything</p>
-  <p>text &nbsp;·&nbsp; images &nbsp;·&nbsp; screenshots</p>
-  <p style="margin-top:8px; font-size:11px; color:#d8d8d8;">drag corner to resize &nbsp;·&nbsp; double-click text to edit</p>
+  <p class="big"><span class="key">⌘V</span> &nbsp;or&nbsp; <span class="key">ctrl V</span></p>
+  <p class="big">paste anything</p>
 </div>
+
+<button id="themeBtn" title="toggle theme">
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="5"/>
+    <line x1="12" y1="1"  x2="12" y2="3"/>
+    <line x1="12" y1="21" x2="12" y2="23"/>
+    <line x1="4.22" y1="4.22"   x2="5.64" y2="5.64"/>
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+    <line x1="1"  y1="12" x2="3"  y2="12"/>
+    <line x1="21" y1="12" x2="23" y2="12"/>
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+  </svg>
+</button>
 
 <div id="toolbar">
   <button class="fab" id="clearBtn">
@@ -235,21 +342,34 @@
   const SUPABASE_URL = 'https://owfpkdogtulgeyiwjrre.supabase.co';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93ZnBrZG9ndHVsZ2V5aXdqcnJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4OTE0ODMsImV4cCI6MjA5MDQ2NzQ4M30.EX4KVlfSA95D5SZvnFbtpD9Whvr-qR62GlrU83PEqck';
 
+  const html     = document.documentElement;
   const hint     = document.getElementById('hint');
   const statusEl = document.getElementById('status');
   const shareBtn = document.getElementById('shareBtn');
   const clearBtn = document.getElementById('clearBtn');
+  const themeBtn = document.getElementById('themeBtn');
   const toast    = document.getElementById('toast');
 
   let items    = [];
   let selected = null;
-  let dragging = false, dragOffset = { x: 0, y: 0 };
+  let dragging = false, dragOffset = { x:0, y:0 };
   let resizing = false, resizeStart = {}, resizeEl = null;
 
+  const saved = localStorage.getItem('theme') || 'dark';
+  html.setAttribute('data-theme', saved);
+
+  themeBtn.addEventListener('click', () => {
+    const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+  });
+
+  let statusTimer = null;
   function setStatus(msg, fade) {
+    clearTimeout(statusTimer);
     statusEl.style.opacity = '1';
     statusEl.textContent = msg;
-    if (fade) setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
+    if (fade) statusTimer = setTimeout(() => statusEl.style.opacity = '0', 2000);
   }
 
   function updateHint() {
@@ -264,9 +384,21 @@
 
   function randomPos() {
     return {
-      x: window.innerWidth  / 2 + (Math.random() - 0.5) * 300 - 100,
-      y: window.innerHeight / 2 + (Math.random() - 0.5) * 200 - 60,
+      x: window.innerWidth  / 2 + (Math.random() - 0.5) * 320 - 120,
+      y: window.innerHeight / 2 + (Math.random() - 0.5) * 220 - 70,
     };
+  }
+
+  function removeItem(el) {
+    el.style.transition = 'opacity 0.15s, transform 0.15s';
+    el.style.opacity = '0';
+    el.style.transform = 'scale(0.95)';
+    setTimeout(() => {
+      el.remove();
+      items = items.filter(i => i !== el);
+      if (selected === el) selected = null;
+      updateHint();
+    }, 150);
   }
 
   function createItem(type, content, x, y, w, h, skipAnim) {
@@ -275,41 +407,41 @@
     if (skipAnim) el.style.animation = 'none';
     el.style.left   = x + 'px';
     el.style.top    = y + 'px';
-    el.style.width  = (w || (type === 'text' ? 300 : 320)) + 'px';
-    el.style.height = (h || (type === 'text' ?  80 : 240)) + 'px';
+    el.style.width  = (w || (type === 'text' ? 280 : 300)) + 'px';
+    el.style.height = (h || (type === 'text' ?  90 : 220)) + 'px';
 
     if (type === 'text') {
-      const span = document.createElement('div');
-      span.className = 'item-text';
-      span.textContent = content;
-      span.addEventListener('dblclick', e => {
+      const inner = document.createElement('div');
+      inner.className = 'item-text-inner';
+      inner.textContent = content;
+      inner.addEventListener('dblclick', e => {
         e.stopPropagation();
-        span.contentEditable = 'true';
-        span.style.cursor = 'text';
-        span.focus();
+        inner.contentEditable = 'true';
+        inner.style.cursor = 'text';
+        inner.focus();
       });
-      span.addEventListener('blur', () => {
-        span.contentEditable = 'false';
-        span.style.cursor = '';
+      inner.addEventListener('blur', () => {
+        inner.contentEditable = 'false';
+        inner.style.cursor = '';
       });
-      el.appendChild(span);
-    } else if (type === 'image') {
+      el.appendChild(inner);
+    } else {
+      // wrap image so overflow:visible works on the item
       const img = document.createElement('img');
       img.src = content;
       img.draggable = false;
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'contain';
+      img.style.borderRadius = '4px';
+      img.style.display = 'block';
       el.appendChild(img);
     }
 
     const delBtn = document.createElement('button');
     delBtn.className = 'delete-btn';
     delBtn.textContent = '×';
-    delBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      el.remove();
-      items = items.filter(i => i !== el);
-      if (selected === el) selected = null;
-      updateHint();
-    });
+    delBtn.addEventListener('click', e => { e.stopPropagation(); removeItem(el); });
     el.appendChild(delBtn);
 
     const handle = document.createElement('div');
@@ -340,10 +472,10 @@
 
   function serialise() {
     return items.map(el => ({
-      type:    el.classList.contains('item-text') ? 'text' : 'image',
+      type: el.classList.contains('item-text') ? 'text' : 'image',
       content: el.classList.contains('item-text')
-               ? el.querySelector('.item-text').textContent
-               : el.querySelector('img').src,
+        ? el.querySelector('.item-text-inner').textContent
+        : el.querySelector('img').src,
       x: el.offsetLeft, y: el.offsetTop,
       w: el.offsetWidth, h: el.offsetHeight,
     }));
@@ -385,22 +517,18 @@
       if (!id) throw new Error();
       const url = `${location.origin}${location.pathname}?b=${id}`;
       await navigator.clipboard.writeText(url);
-      setStatus('copied!', true);
-      toast.textContent = '🔗 link copied — click to open';
+      setStatus('copied', true);
+      toast.textContent = '↗ link copied — click to open';
       toast.classList.add('show');
       toast.onclick = () => window.open(url, '_blank');
       setTimeout(() => toast.classList.remove('show'), 4000);
-    } catch(e) {
-      setStatus('error :(', true);
-    }
+    } catch { setStatus('error', true); }
     shareBtn.style.pointerEvents = '';
   });
 
   clearBtn.addEventListener('click', () => {
-    items.forEach(el => el.remove());
-    items = []; selected = null;
-    setStatus('', false);
-    updateHint();
+    [...items].forEach(el => removeItem(el));
+    setTimeout(() => { items = []; selected = null; setStatus('', false); updateHint(); }, 200);
   });
 
   document.addEventListener('mousemove', e => {
@@ -413,10 +541,9 @@
       resizeEl.style.height = Math.max(40,  resizeStart.h + e.clientY - resizeStart.mouseY) + 'px';
     }
   });
+
   document.addEventListener('mouseup', () => { dragging = false; resizing = false; resizeEl = null; });
-  document.body.addEventListener('mousedown', e => {
-    if (e.target === document.body || e.target === hint) selectItem(null);
-  });
+  document.body.addEventListener('mousedown', e => { if (e.target === document.body) selectItem(null); });
 
   document.addEventListener('paste', e => {
     e.preventDefault();
@@ -437,10 +564,7 @@
   document.addEventListener('keydown', e => {
     if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
       if (selected.querySelector('[contenteditable="true"]')) return;
-      selected.remove();
-      items = items.filter(i => i !== selected);
-      selected = null;
-      updateHint();
+      removeItem(selected);
     }
   });
 
@@ -451,8 +575,8 @@
     try {
       const data = await dbLoad(id);
       if (data) { deserialise(data); setStatus('', false); }
-      else setStatus('board not found', true);
-    } catch { setStatus('error loading', true); }
+      else setStatus('not found', true);
+    } catch { setStatus('error', true); }
   })();
 </script>
 </body>
